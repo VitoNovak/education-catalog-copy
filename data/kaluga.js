@@ -1,4 +1,5 @@
-
+window.catalogData = window.catalogData || {};
+window.catalogData["Калужская область"] = [
   // === 1 ===
   {
     number: 1,
