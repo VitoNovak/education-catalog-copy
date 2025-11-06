@@ -131,7 +131,8 @@ function render(){
     const ul = document.createElement("ul"); ul.className="specializations";
     (item.directions || []).forEach(d=>{
       const li = document.createElement("li");
-      li.innerHTML = `<strong>${highlight(d.code || "", qRaw)}</strong> ${highlight(d.title || "", qRaw)}`;
+      const levelHtml = d.level ? `<span style="color:#000;font-weight:bold;">${highlight(d.level, qRaw)}</span>` : '';
+      li.innerHTML = `<strong>${highlight(d.code || "", qRaw)}</strong> ${highlight(d.title || "", qRaw)} ${levelHtml}`;
       ul.appendChild(li);
     });
     tdDirs.appendChild(ul);
@@ -175,4 +176,3 @@ regionBtns.forEach(btn=>{
   setActive(currentRegion);
   render();
 })();
-
