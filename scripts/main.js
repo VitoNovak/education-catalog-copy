@@ -1,4 +1,4 @@
-// scripts/main.js — с автоматической пометкой уровней по коду
+// scripts/main.js — группировка по уровням ВЕЗДЕ, СПО без (СПО)
 const DEFAULT_REGION = "Пермский край";
 const tableBody = document.getElementById("institutions-body");
 const emptyState = document.getElementById("empty-state");
@@ -37,30 +37,22 @@ function pickInitialRegion() {
 let currentRegion = pickInitialRegion();
 setActive(currentRegion);
 
-// === НОВАЯ ФУНКЦИЯ: Определяем уровень по коду ===
+// === Определяем уровень по коду (ФГОС) ===
 function getLevelByCode(code) {
   if (!code) return null;
   const c = code.trim();
 
-  // СПО — .02.
-  if (c.includes(".02.")) return "Среднее профильное образование (СПО)";
-
-  // Бакалавриат — .03.
+  if (c.includes(".02.")) return "СПО"; // спец. метка
   if (c.match(/\.(03|03)\./)) return "Бакалавриат";
-
-  // Магистратура — .04.
   if (c.match(/\.(04|04)\./)) return "Магистратура";
-
-  // Специалитет — .05.
   if (c.includes(".05.")) return "Специалитет";
-
-  // Аспирантура — начинается с 1. 4. 5. 6.
   if (/^[1-6]\./.test(c)) return "Аспирантура";
+  if (c.includes(".08.")) return "Ординатура";
+  if (c.includes(".09.")) return "Ассистентура";
 
-  return null; // если не распозналось — просто покажем как есть
+  return null;
 }
 
-// === Рендер с группировкой по уровням ===
 function render() {
   const qRaw = (searchInput?.value || "").trim();
   const q = qRaw.toLowerCase();
@@ -94,7 +86,6 @@ function render() {
     }
 
     if (item.level && Array.isArray(item.programs)) {
-      // старый формат блоков — оставляем как есть
       const sub = document.createElement("tr");
       sub.className = "table-subhead";
       sub.innerHTML = `<th scope="col">№</th><th scope="col">${highlight(item.level, qRaw)}</th><th scope="col">Программы</th>`;
@@ -115,7 +106,6 @@ function render() {
       return;
     }
 
-    // === ОСНОВНАЯ ЗАПИСЬ С АВТО-УРОВНЯМИ ===
     const row = document.createElement("tr");
 
     const tdNum = document.createElement("td");
@@ -140,50 +130,90 @@ function render() {
 
     // Группируем по уровням
     const levelsMap = {};
+    let hasHigher = false;
+    let hasSpo = false;
+
     (item.directions || []).forEach(d => {
-      const level = getLevelByCode(d.code) || "Другое";
+      let level = getLevelByCode(d.code);
+      if (level === "СПО") {
+        hasSpo = true;
+        if (hasHigher) level = "Среднее профильное образование"; // только если есть высшее
+        else level = null; // только СПО — без заголовка
+      } else if (level) {
+        hasHigher = true;
+      } else {
+        level = "Другое";
+      }
       if (!levelsMap[level]) levelsMap[level] = [];
       levelsMap[level].push(d);
     });
 
-    // Если уровни не распознались — показываем как было
-    if (Object.keys(levelsMap).length === 1 && levelsMap["Другое"]) {
-      const ul = document.createElement("ul");
-      ul.className = "specializations";
-      item.directions.forEach(d => {
-        const li = document.createElement("li");
-        li.innerHTML = `<strong>${highlight(d.code || "", qRaw)}</strong> ${highlight(d.title || "", qRaw)}`;
-        ul.appendChild(li);
-      });
-      tdDirs.appendChild(ul);
-    } else {
-      // С группировкой
-      Object.keys(levelsMap).sort().forEach(level => {
-        if (level === "Другое") return; // пропускаем, если есть нормальные уровни
-        const strong = document.createElement("strong");
-        strong.textContent = level + ":";
-        tdDirs.appendChild(strong);
-        const ul = document.createElement("ul");
-        ul.className = "specializations";
-        levelsMap[level].forEach(d => {
-          const li = document.createElement("li");
-          li.innerHTML = `• <strong>${highlight(d.code, qRaw)}</strong> ${highlight(d.title, qRaw)}`;
-          ul.appendChild(li);
-        });
-        tdDirs.appendChild(ul);
-      });
+    // Порядок
+    const order = ["Бакалавриат", "Специалитет", "Магистратура", "Аспирантура", "Ординатура", "Ассистентура"];
+    let rendered = false;
 
-      // Если остались "Другое" — добавим в конец
-      if (levelsMap["Другое"]) {
-        const ul = document.createElement("ul");
-        ul.className = "specializations";
-        levelsMap["Другое"].forEach(d => {
+    order.forEach(l => {
+      if (levelsMap[l]) {
+        rendered = true;
+        const strong = document.createElement("strong");
+        strong.textContent = l + ":";
+        tdDirs.appendChild(strong);
+        tdDirs.appendChild(document.createElement("br"));
+        const ul = document.createElement("ul"); ul.className = "specializations";
+        levelsMap[l].forEach(d => {
           const li = document.createElement("li");
           li.innerHTML = `• <strong>${highlight(d.code, qRaw)}</strong> ${highlight(d.title, qRaw)}`;
           ul.appendChild(li);
         });
         tdDirs.appendChild(ul);
       }
+    });
+
+    // СПО (с заголовком или без)
+    if (levelsMap["Среднее профильное образование"]) {
+      rendered = true;
+      const strong = document.createElement("strong");
+      strong.textContent = "Среднее профильное образование:";
+      tdDirs.appendChild(strong);
+      tdDirs.appendChild(document.createElement("br"));
+      const ul = document.createElement("ul"); ul.className = "specializations";
+      levelsMap["Среднее профильное образование"].forEach(d => {
+        const li = document.createElement("li");
+        li.innerHTML = `• <strong>${highlight(d.code, qRaw)}</strong> ${highlight(d.title, qRaw)}`;
+        ul.appendChild(li);
+      });
+      tdDirs.appendChild(ul);
+    } else if (levelsMap[null]) {
+      rendered = true;
+      const ul = document.createElement("ul"); ul.className = "specializations";
+      levelsMap[null].forEach(d => {
+        const li = document.createElement("li");
+        li.innerHTML = `• <strong>${highlight(d.code, qRaw)}</strong> ${highlight(d.title, qRaw)}`;
+        ul.appendChild(li);
+      });
+      tdDirs.appendChild(ul);
+    }
+
+    // Другое в конец
+    if (levelsMap["Другое"]) {
+      const ul = document.createElement("ul"); ul.className = "specializations";
+      levelsMap["Другое"].forEach(d => {
+        const li = document.createElement("li");
+        li.innerHTML = `• <strong>${highlight(d.code, qRaw)}</strong> ${highlight(d.title, qRaw)}`;
+        ul.appendChild(li);
+      });
+      tdDirs.appendChild(ul);
+    }
+
+    // Если ничего не сгруппировалось — старый стиль
+    if (!rendered) {
+      const ul = document.createElement("ul"); ul.className = "specializations";
+      item.directions.forEach(d => {
+        const li = document.createElement("li");
+        li.innerHTML = `<strong>${highlight(d.code || "", qRaw)}</strong> ${highlight(d.title || "", qRaw)}`;
+        ul.appendChild(li);
+      });
+      tdDirs.appendChild(ul);
     }
 
     row.append(tdNum, tdInfo, tdDirs);
