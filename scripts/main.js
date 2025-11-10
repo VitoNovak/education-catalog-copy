@@ -1,6 +1,4 @@
-// scripts/main.js — группировка по уровням ВЕЗДЕ, СПО без (СПО)
-// ТОЧКИ • УБРАНЫ НАВСЕГДА — БЕЗ CSS, БЕЗ ЛИШНЕГО
-
+// scripts/main.js — группировка по уровням ВЕЗДЕ, СПО без (СПО), ТОЧКИ • УБРАНЫ НАВСЕГДА
 const DEFAULT_REGION = "Пермский край";
 const tableBody = document.getElementById("institutions-body");
 const emptyState = document.getElementById("empty-state");
@@ -44,7 +42,7 @@ function getLevelByCode(code) {
   if (!code) return null;
   const c = code.trim();
   if (c.includes(".02.")) return "СПО";
-  if (c.match(/\.(03|03)\./)) return "Бакалавриат";
+  if (c.match(/\.(03|04)\./)) return "Бакалавриат";  // исправил дубликат
   if (c.match(/\.(04|04)\./)) return "Магистратура";
   if (c.includes(".05.")) return "Специалитет";
   if (/^[1-6]\./.test(c)) return "Аспирантура";
@@ -95,10 +93,14 @@ function render() {
       const td1 = document.createElement("td"); td1.innerHTML = "";
       const td2 = document.createElement("td"); td2.innerHTML = "";
       const td3 = document.createElement("td");
-      const ul = document.createElement("ul"); ul.className = "specializations";
+      const ul = document.createElement("ul");
+      ul.style.listStyle = "none";   // УБИРАЕМ ТОЧКИ
+      ul.style.paddingLeft = "0";
+      ul.style.margin = "0";
 
       item.programs.forEach(p => {
         const li = document.createElement("li");
+        li.style.marginBottom = "6px";
         li.innerHTML = `${p.code ? `<strong>${highlight(p.code, qRaw)}</strong> ` : ""}${highlight(p.title || "", qRaw)}`;
         ul.appendChild(li);
       });
@@ -129,7 +131,6 @@ function render() {
     const tdDirs = document.createElement("td");
     tdDirs.setAttribute("data-label", "Направления подготовки Номер / наименование специальности");
 
-    // Группировка по уровням
     const levelsMap = {};
     let hasHigher = false;
     let hasSpo = false;
@@ -152,6 +153,7 @@ function render() {
     const order = ["Бакалавриат", "Специалитет", "Магистратура", "Аспирантура", "Ординатура", "Ассистентура"];
     let rendered = false;
 
+    // === ВЫСШЕЕ ОБРАЗОВАНИЕ ===
     order.forEach(l => {
       if (levelsMap[l]) {
         rendered = true;
@@ -161,13 +163,13 @@ function render() {
         tdDirs.appendChild(document.createElement("br"));
 
         const ul = document.createElement("ul");
-        ul.className = "specializations";
-        ul.style.listStyle = "none"; // УБИРАЕМ ТОЧКИ
+        ul.style.listStyle = "none";
         ul.style.paddingLeft = "0";
+        ul.style.margin = "4px 0";
 
         levelsMap[l].forEach(d => {
           const li = document.createElement("li");
-          li.style.marginBottom = "4px";
+          li.style.marginBottom = "6px";
           li.innerHTML = `<strong>${highlight(d.code, qRaw)}</strong> ${highlight(d.title, qRaw)}`;
           ul.appendChild(li);
         });
@@ -175,7 +177,7 @@ function render() {
       }
     });
 
-    // СПО с заголовком или без
+    // === СРЕДНЕЕ ПРОФИЛЬНОЕ (только если есть ВПО) ===
     if (levelsMap["Среднее профильное образование"]) {
       rendered = true;
       const strong = document.createElement("strong");
@@ -184,59 +186,62 @@ function render() {
       tdDirs.appendChild(document.createElement("br"));
 
       const ul = document.createElement("ul");
-      ul.className = "specializations";
       ul.style.listStyle = "none";
       ul.style.paddingLeft = "0";
+      ul.style.margin = "4px 0";
 
       levelsMap["Среднее профильное образование"].forEach(d => {
         const li = document.createElement("li");
-        li.style.marginBottom = "4px";
+        li.style.marginBottom = "6px";
         li.innerHTML = `<strong>${highlight(d.code, qRaw)}</strong> ${highlight(d.title, qRaw)}`;
         ul.appendChild(li);
       });
       tdDirs.appendChild(ul);
-    } else if (levelsMap[null]) {
+    } 
+    // === ТОЛЬКО СПО — БЕЗ ЗАГОЛОВКА ===
+    else if (levelsMap[null]) {
       rendered = true;
       const ul = document.createElement("ul");
-      ul.className = "specializations";
       ul.style.listStyle = "none";
       ul.style.paddingLeft = "0";
+      ul.style.margin = "4px 0";
 
       levelsMap[null].forEach(d => {
         const li = document.createElement("li");
-        li.style.marginBottom = "4px";
+        li.style.marginBottom = "6px";
         li.innerHTML = `<strong>${highlight(d.code, qRaw)}</strong> ${highlight(d.title, qRaw)}`;
         ul.appendChild(li);
       });
       tdDirs.appendChild(ul);
     }
 
-    // Другое
+    // === ДРУГОЕ ===
     if (levelsMap["Другое"]) {
+      rendered = true;
       const ul = document.createElement("ul");
-      ul.className = "specializations";
       ul.style.listStyle = "none";
       ul.style.paddingLeft = "0";
+      ul.style.margin = "4px 0";
 
       levelsMap["Другое"].forEach(d => {
         const li = document.createElement("li");
-        li.style.marginBottom = "4px";
+        li.style.marginBottom = "6px";
         li.innerHTML = `<strong>${highlight(d.code, qRaw)}</strong> ${highlight(d.title, qRaw)}`;
         ul.appendChild(li);
       });
       tdDirs.appendChild(ul);
     }
 
-    // Резервный вариант
+    // === РЕЗЕРВНЫЙ (если ничего не сработало) ===
     if (!rendered) {
       const ul = document.createElement("ul");
-      ul.className = "specializations";
       ul.style.listStyle = "none";
       ul.style.paddingLeft = "0";
+      ul.style.margin = "4px 0";
 
       item.directions.forEach(d => {
         const li = document.createElement("li");
-        li.style.marginBottom = "4px";
+        li.style.marginBottom = "6px";
         li.innerHTML = `<strong>${highlight(d.code || "", qRaw)}</strong> ${highlight(d.title || "", qRaw)}`;
         ul.appendChild(li);
       });
