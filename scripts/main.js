@@ -1,227 +1,356 @@
-:root{--primary-blue:#1E63F0;--light-blue:#f2f6ff;--text-dark:#1a1a1a;}
-*{box-sizing:border-box}
-body{font-family:"Segoe UI",Roboto,Arial,sans-serif;margin:0;background:var(--light-blue);color:var(--text-dark)}
-header{background:#fff;box-shadow:0 2px 6px rgba(30,99,240,.15);padding:1.5rem 1rem;position:sticky;top:0;z-index:10}
-h1{margin:0 0 1rem;color:var(--primary-blue);text-align:center}
+// scripts/main.js
+const DEFAULT_REGION = "Пермский край";
+const VISIBLE_REGIONS = 8;
 
-/* ============================
-   БЛОК ВЫБОРА РЕГИОНА
-   ============================ */
-.region-selector {
-  max-width: 960px;
-  margin: 0 auto 1rem;
-}
+const tableBody = document.getElementById("institutions-body");
+const emptyState = document.getElementById("empty-state");
+const searchInput = document.getElementById("search");
 
-/* --- Поиск по регионам --- */
-.region-search-wrap {
-  position: relative;
-  margin-bottom: .75rem;
-}
-.region-search-icon {
-  position: absolute;
-  left: .85rem;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: .95rem;
-  pointer-events: none;
-  opacity: .5;
-}
-.region-search-input {
-  width: 100%;
-  padding: .6rem 2.5rem .6rem 2.4rem;
-  border: 2px solid #d0dcf7;
-  border-radius: 999px;
-  font-size: .95rem;
-  color: var(--text-dark);
-  background: #f7f9ff;
-  transition: border-color .2s, box-shadow .2s;
-}
-.region-search-input:focus {
-  outline: 0;
-  border-color: var(--primary-blue);
-  background: #fff;
-  box-shadow: 0 0 0 4px rgba(30,99,240,.12);
-}
-.region-search-input::placeholder { color: #9aabcf; }
-.region-search-clear {
-  position: absolute;
-  right: .7rem;
-  top: 50%;
-  transform: translateY(-50%);
-  border: none;
-  background: none;
-  color: #9aabcf;
-  font-size: 1rem;
-  cursor: pointer;
-  padding: .2rem .4rem;
-  border-radius: 50%;
-  line-height: 1;
-  transition: color .15s, background .15s;
-}
-.region-search-clear:hover { color: var(--primary-blue); background: rgba(30,99,240,.08); }
+let regionBtns = [];
 
-/* --- Кнопки регионов --- */
-.region-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: .6rem;
-  justify-content: center;
-  margin-bottom: .6rem;
-  /* Коллапс: скрываем лишние через .collapsed */
+function norm(s) { return (s ?? "").toString().toLowerCase(); }
+
+function highlight(text, qRaw) {
+  const src = (text ?? "").toString();
+  const q = (qRaw ?? "").toString().trim();
+  if (!q) return src;
+  const safe = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(safe, "gi");
+  return src.replace(re, m => `<mark>${m}</mark>`);
 }
 
-/* Скрытые кнопки в свёрнутом состоянии */
-.region-buttons.collapsed .region-button.region-hidden {
-  display: none;
+function regions() {
+  return Object.keys(window.catalogData || {}).sort((a, b) => a.localeCompare(b, "ru"));
 }
 
-.region-button {
-  border: 2px solid var(--primary-blue);
-  background: #fff;
-  color: var(--primary-blue);
-  padding: .5rem 1.1rem;
-  border-radius: 999px;
-  font-weight: 600;
-  font-size: .9rem;
-  cursor: pointer;
-  transition: background .18s, color .18s, box-shadow .18s, transform .1s;
-}
-.region-button.active,
-.region-button:hover,
-.region-button:focus {
-  background: var(--primary-blue);
-  color: #fff;
-  outline: 0;
-  box-shadow: 0 0 0 4px rgba(30,99,240,.15);
-}
-.region-button:active { transform: scale(.97); }
-
-/* Подсветка совпадения при поиске */
-.region-button mark {
-  background: #ffe066;
-  color: var(--text-dark);
-  border-radius: 2px;
-  padding: 0 1px;
+function setActive(name) {
+  regionBtns.forEach(b => b.classList.toggle("active", b.dataset.region === name));
 }
 
-/* --- Кнопка "Показать все" --- */
-.region-toggle-wrap {
-  text-align: center;
-  margin-top: .25rem;
-}
-.region-toggle-btn {
-  border: none;
-  background: none;
-  color: var(--primary-blue);
-  font-size: .9rem;
-  font-weight: 600;
-  cursor: pointer;
-  padding: .4rem .8rem;
-  border-radius: 8px;
-  display: inline-flex;
-  align-items: center;
-  gap: .4rem;
-  transition: background .15s;
-}
-.region-toggle-btn:hover { background: rgba(30,99,240,.07); }
-.region-toggle-count {
-  background: rgba(30,99,240,.12);
-  color: var(--primary-blue);
-  border-radius: 999px;
-  padding: .05rem .55rem;
-  font-size: .8rem;
-  font-weight: 700;
-}
-.region-toggle-arrow {
-  font-size: .75rem;
-  transition: transform .22s;
-  display: inline-block;
-}
-.region-toggle-btn[aria-expanded="true"] .region-toggle-arrow {
-  transform: rotate(180deg);
+function pickInitialRegion() {
+  const btnActive = document.querySelector(".region-button.active");
+  if (btnActive) return btnActive.dataset.region;
+  const keys = regions();
+  if (keys.includes(DEFAULT_REGION)) return DEFAULT_REGION;
+  if (keys.length) return keys[0];
+  if (regionBtns.length) return regionBtns[0].dataset.region;
+  return "";
 }
 
-/* --- Нет результатов поиска --- */
-.region-no-results {
-  text-align: center;
-  color: #9aabcf;
-  font-size: .9rem;
-  padding: .4rem 0;
+let currentRegion = "";
+
+function getLevelByCode(code) {
+  if (!code) return null;
+  const c = code.trim();
+  if (c.includes(".02.")) return "СПО";
+  if (c.match(/\.(03|04)\./)) return "Бакалавриат";
+  if (c.includes(".05.")) return "Специалитет";
+  if (/^[1-6]\./.test(c)) return "Аспирантура";
+  if (c.includes(".08.")) return "Ординатура";
+  if (c.includes(".09.")) return "Ассистентура";
+  return null;
 }
 
-/* Поиск */
-.search-container{max-width:960px;margin:0 auto}
-.search-container label{display:block;font-weight:600;margin-bottom:.5rem;color:var(--primary-blue)}
-.search-input{width:100%;padding:.75rem 1rem;border:2px solid var(--primary-blue);border-radius:12px;font-size:1rem}
-.search-input:focus{outline:0;box-shadow:0 0 0 4px rgba(30,99,240,.15)}
+function render() {
+  const qRaw = (searchInput?.value || "").trim();
+  const q = qRaw.toLowerCase();
+  const data = Array.isArray(window.catalogData?.[currentRegion]) ? window.catalogData[currentRegion] : [];
+  tableBody.innerHTML = "";
 
-main{max-width:1200px;margin:0 auto;padding:2rem 1rem 3rem}
+  const filtered = data.filter(item => {
+    if (item.type === "heading") return q === "";
+    if (item.level && Array.isArray(item.programs)) {
+      if (!q) return true;
+      if (norm(item.level).includes(q)) return true;
+      return item.programs.some(p => norm(p.code).includes(q) || norm(p.title).includes(q));
+    }
+    if (!q) return true;
+    const byNum = norm(item.number).includes(q);
+    const byName = norm(item.name).includes(q);
+    const byDirs = Array.isArray(item.directions) && item.directions.some(d => norm(d.code).includes(q) || norm(d.title).includes(q));
+    return byNum || byName || byDirs;
+  });
 
-/* ===== ДЕСКТОП ===== */
-table.catalog{
-  width:100%;
-  border-collapse:collapse;
-  background:#fff;
-  border-radius:16px;
-  overflow:hidden;
-  box-shadow:0 10px 30px rgba(30,99,240,.12);
-  table-layout:fixed;
+  if (filtered.length === 0) { emptyState.hidden = false; return; }
+  emptyState.hidden = true;
+
+  filtered.forEach((item) => {
+    if (item.type === "heading") {
+      const tr = document.createElement("tr");
+      tr.className = "table-subhead";
+      tr.innerHTML = `<th scope="col">№</th><th scope="col">${item.title}</th><th scope="col">Направления подготовки Номер / наименование специальности</th>`;
+      tableBody.appendChild(tr);
+      return;
+    }
+
+    if (item.level && Array.isArray(item.programs)) {
+      const sub = document.createElement("tr");
+      sub.className = "table-subhead";
+      sub.innerHTML = `<th scope="col">№</th><th scope="col">${highlight(item.level, qRaw)}</th><th scope="col">Программы</th>`;
+      tableBody.appendChild(sub);
+
+      const row = document.createElement("tr");
+      const td1 = document.createElement("td"); td1.innerHTML = "";
+      const td2 = document.createElement("td"); td2.innerHTML = "";
+      const td3 = document.createElement("td");
+      const ul = document.createElement("ul");
+      ul.style.listStyle = "none";
+      ul.style.paddingLeft = "0";
+      ul.style.margin = "0";
+
+      item.programs.forEach(p => {
+        const li = document.createElement("li");
+        li.style.marginBottom = "6px";
+        li.innerHTML = `${p.code ? `<strong>${highlight(p.code, qRaw)}</strong> ` : ""}${highlight(p.title || "", qRaw)}`;
+        ul.appendChild(li);
+      });
+      td3.appendChild(ul);
+      row.append(td1, td2, td3);
+      tableBody.appendChild(row);
+      return;
+    }
+
+    const row = document.createElement("tr");
+    const tdNum = document.createElement("td");
+    tdNum.setAttribute("data-label", "№");
+    tdNum.innerHTML = highlight(item.number ?? "", qRaw);
+
+    const tdInfo = document.createElement("td");
+    tdInfo.setAttribute("data-label", "Каталог специальностей и профессионального образования");
+    tdInfo.innerHTML = `
+      <div class="institution-name">${highlight(item.name || "", qRaw)}</div>
+      <ul class="contact-list">
+        ${item.site || item.website ? `<li><strong>Сайт:</strong> <a href="${item.site || item.website}" target="_blank" rel="noopener">${highlight(item.site || item.website, qRaw)}</a></li>` : ""}
+        ${item.group || item.vk ? `<li><strong>Группа VK:</strong> <a href="${item.group || item.vk}" target="_blank" rel="noopener">${highlight(item.group || item.vk, qRaw)}</a></li>` : ""}
+        ${item.address ? `<li><strong>Адрес:</strong> ${highlight(item.address, qRaw)}</li>` : ""}
+        ${item.tel || item.phone ? `<li><strong>Тел.:</strong> ${highlight(item.tel || item.phone, qRaw)}</li>` : ""}
+        ${item.email ? `<li><strong>E-mail:</strong> <a href="mailto:${item.email}">${highlight(item.email, qRaw)}</a></li>` : ""}
+      </ul>
+    `;
+
+    const tdDirs = document.createElement("td");
+    tdDirs.setAttribute("data-label", "Направления подготовки Номер / наименование специальности");
+
+    const levelsMap = {};
+    let hasHigher = false;
+
+    (item.directions || []).forEach(d => {
+      let level = getLevelByCode(d.code);
+      if (level === "СПО") {
+        if (hasHigher) level = "Среднее профильное образование";
+        else level = null;
+      } else if (level) {
+        hasHigher = true;
+      } else {
+        level = "Другое";
+      }
+      if (!levelsMap[level]) levelsMap[level] = [];
+      levelsMap[level].push(d);
+    });
+
+    const order = ["Бакалавриат", "Специалитет", "Магистратура", "Аспирантура", "Ординатура", "Ассистентура"];
+    let rendered = false;
+
+    order.forEach(l => {
+      if (levelsMap[l]) {
+        rendered = true;
+        const strong = document.createElement("strong");
+        strong.textContent = l + ":";
+        tdDirs.appendChild(strong);
+        tdDirs.appendChild(document.createElement("br"));
+        const ul = document.createElement("ul");
+        ul.style.listStyle = "none"; ul.style.paddingLeft = "0"; ul.style.margin = "4px 0";
+        levelsMap[l].forEach(d => {
+          const li = document.createElement("li");
+          li.style.marginBottom = "6px";
+          li.innerHTML = `<strong>${highlight(d.code, qRaw)}</strong> ${highlight(d.title, qRaw)}`;
+          ul.appendChild(li);
+        });
+        tdDirs.appendChild(ul);
+      }
+    });
+
+    if (levelsMap["Среднее профильное образование"]) {
+      rendered = true;
+      const strong = document.createElement("strong");
+      strong.textContent = "Среднее профильное образование:";
+      tdDirs.appendChild(strong);
+      tdDirs.appendChild(document.createElement("br"));
+      const ul = document.createElement("ul");
+      ul.style.listStyle = "none"; ul.style.paddingLeft = "0"; ul.style.margin = "4px 0";
+      levelsMap["Среднее профильное образование"].forEach(d => {
+        const li = document.createElement("li");
+        li.style.marginBottom = "6px";
+        li.innerHTML = `<strong>${highlight(d.code, qRaw)}</strong> ${highlight(d.title, qRaw)}`;
+        ul.appendChild(li);
+      });
+      tdDirs.appendChild(ul);
+    } else if (levelsMap[null]) {
+      rendered = true;
+      const ul = document.createElement("ul");
+      ul.style.listStyle = "none"; ul.style.paddingLeft = "0"; ul.style.margin = "4px 0";
+      levelsMap[null].forEach(d => {
+        const li = document.createElement("li");
+        li.style.marginBottom = "6px";
+        li.innerHTML = `<strong>${highlight(d.code, qRaw)}</strong> ${highlight(d.title, qRaw)}`;
+        ul.appendChild(li);
+      });
+      tdDirs.appendChild(ul);
+    }
+
+    if (levelsMap["Другое"]) {
+      rendered = true;
+      const ul = document.createElement("ul");
+      ul.style.listStyle = "none"; ul.style.paddingLeft = "0"; ul.style.margin = "4px 0";
+      levelsMap["Другое"].forEach(d => {
+        const li = document.createElement("li");
+        li.style.marginBottom = "6px";
+        li.innerHTML = `<strong>${highlight(d.code, qRaw)}</strong> ${highlight(d.title, qRaw)}`;
+        ul.appendChild(li);
+      });
+      tdDirs.appendChild(ul);
+    }
+
+    if (!rendered) {
+      const ul = document.createElement("ul");
+      ul.style.listStyle = "none"; ul.style.paddingLeft = "0"; ul.style.margin = "4px 0";
+      item.directions.forEach(d => {
+        const li = document.createElement("li");
+        li.style.marginBottom = "6px";
+        li.innerHTML = `<strong>${highlight(d.code || "", qRaw)}</strong> ${highlight(d.title || "", qRaw)}`;
+        ul.appendChild(li);
+      });
+      tdDirs.appendChild(ul);
+    }
+
+    row.append(tdNum, tdInfo, tdDirs);
+    tableBody.appendChild(row);
+  });
 }
-thead{background:var(--primary-blue);color:#fff}
-th,td{padding:1.25rem 1rem;vertical-align:top;text-align:left}
 
-.catalog th:nth-child(1), .catalog td:nth-child(1){width:60px;text-align:center;font-weight:600}
-.catalog th:nth-child(2), .catalog td:nth-child(2){width:40%}
-.catalog th:nth-child(3), .catalog td:nth-child(3){width:60%}
+function debounce(fn, ms) { let t = 0; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 
-tbody tr:nth-child(even){background:rgba(30,99,240,.04)}
-tbody tr:hover{background:rgba(30,99,240,.08)}
+// =============================================
+//  ВСЁ ЗАПУСКАЕТСЯ ПОСЛЕ ЗАГРУЗКИ DOM
+// =============================================
+document.addEventListener("DOMContentLoaded", function () {
 
-.institution-name{font-size:1.05rem;font-weight:700;margin-bottom:.75rem}
-.contact-list{margin:0;padding:0;list-style:none}
-.contact-list li{margin-bottom:.35rem;line-height:1.4}
-a{color:var(--primary-blue);text-decoration:none;font-weight:600}
-a:hover,a:focus{text-decoration:underline}
-.specializations{margin:0;padding-left:1.1rem}
-.empty-state{text-align:center;padding:2rem;color:#4a4a4a}
+  regionBtns = Array.from(document.querySelectorAll(".region-button"));
 
-.table-subhead th{padding:.9rem 1rem;background:var(--primary-blue);color:#fff;font-weight:700}
-.table-subhead th:first-child{border-top-left-radius:10px;border-bottom-left-radius:10px;width:60px;text-align:center}
-.table-subhead th:last-child{border-top-right-radius:10px;border-bottom-right-radius:10px}
+  regionBtns.forEach(btn => {
+    btn.addEventListener("click", () => {
+      const name = btn.dataset.region;
+      if (!name) return;
+      currentRegion = name;
+      setActive(name);
+      render();
+    });
+  });
 
-.contact-list a, .specializations li{word-break:break-word;overflow-wrap:anywhere}
+  const onSearch = debounce(render, 120);
+  searchInput && searchInput.addEventListener("input", onSearch);
 
-/* ===== МОБИЛЬНАЯ ВЕРСТКА ===== */
-@media (max-width: 768px) {
-  .catalog{display:block;overflow-x:hidden;-webkit-overflow-scrolling:touch;border-radius:12px;background:#fff;table-layout:auto}
-  .catalog thead{display:none}
-  .catalog th, .catalog td{width:100% !important}
-  .catalog tbody, .catalog tr, .catalog td{display:block;width:100%}
-  .catalog tbody tr{
-    margin-bottom:1rem;
-    border:1px solid rgba(30,99,240,.12);
-    border-radius:12px;
-    overflow:hidden;
-    background:#fff;
+  currentRegion = pickInitialRegion();
+  setActive(currentRegion);
+
+  // =============================================
+  //  ПОИСК ПО РЕГИОНАМ + ПОКАЗАТЬ ВСЕ
+  // =============================================
+  const regionList   = document.getElementById("region-buttons-list");
+  const toggleBtn    = document.getElementById("region-toggle-btn");
+  const toggleWrap   = document.getElementById("region-toggle-wrap");
+  const countBadge   = document.getElementById("region-toggle-count");
+  const noResults    = document.getElementById("region-no-results");
+  const regionSearch = document.getElementById("region-search");
+  const regionClear  = document.getElementById("region-search-clear");
+
+  if (regionList && toggleBtn) {
+    const allBtns     = Array.from(regionList.querySelectorAll(".region-button"));
+    const hiddenCount = Math.max(0, allBtns.length - VISIBLE_REGIONS);
+    let isExpanded    = false;
+    let searchQuery   = "";
+
+    allBtns.forEach((btn, i) => {
+      if (i >= VISIBLE_REGIONS) btn.classList.add("region-hidden");
+    });
+
+    if (hiddenCount > 0) {
+      countBadge.textContent = "ещё " + hiddenCount;
+      regionList.classList.add("collapsed");
+    } else {
+      toggleWrap.hidden = true;
+    }
+
+    toggleBtn.addEventListener("click", () => {
+      isExpanded = !isExpanded;
+      toggleBtn.setAttribute("aria-expanded", String(isExpanded));
+      if (isExpanded) {
+        regionList.classList.remove("collapsed");
+        countBadge.textContent = "";
+        toggleBtn.firstChild.textContent = "Скрыть ";
+      } else {
+        regionList.classList.add("collapsed");
+        countBadge.textContent = "ещё " + hiddenCount;
+        toggleBtn.firstChild.textContent = "Показать все регионы ";
+      }
+      if (!isExpanded && regionSearch) {
+        regionSearch.value = "";
+        searchQuery = "";
+        if (regionClear) regionClear.hidden = true;
+        applySearch();
+      }
+    });
+
+    function applySearch() {
+      const q = norm(searchQuery);
+      let found = 0;
+
+      allBtns.forEach(btn => {
+        const name = btn.dataset.region || "";
+        const match = !q || norm(name).includes(q);
+
+        if (q && match) {
+          const safe = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          btn.innerHTML = name.replace(new RegExp(safe, "gi"), m => `<mark>${m}</mark>`);
+        } else {
+          btn.textContent = name;
+        }
+
+        btn.style.display = q ? (match ? "" : "none") : "";
+        if (q && match) found++;
+      });
+
+      if (noResults) noResults.hidden = !(q && found === 0);
+
+      if (toggleWrap) {
+        if (q) {
+          toggleWrap.hidden = true;
+          regionList.classList.remove("collapsed");
+        } else {
+          toggleWrap.hidden = hiddenCount <= 0;
+          regionList.classList.toggle("collapsed", !isExpanded);
+        }
+      }
+    }
+
+    if (regionSearch) {
+      regionSearch.addEventListener("input", () => {
+        searchQuery = regionSearch.value.trim();
+        if (regionClear) regionClear.hidden = !searchQuery;
+        applySearch();
+      });
+    }
+
+    if (regionClear) {
+      regionClear.addEventListener("click", () => {
+        regionSearch.value = "";
+        searchQuery = "";
+        regionClear.hidden = true;
+        regionSearch.focus();
+        applySearch();
+      });
+    }
   }
-  .catalog td{display:block;padding:.9rem 1rem}
-  .catalog td::before{
-    content:attr(data-label);
-    display:block;
-    margin-bottom:.5rem;
-    font-weight:700;
-    color:var(--primary-blue);
-  }
-  .catalog td:nth-child(1){
-    font-size:1.05rem;
-    background:rgba(30,99,240,.04);
-    padding:.6rem 1rem;
-  }
-  .table-subhead{display:block;margin:0 0 .5rem;border-radius:10px;overflow:hidden}
-  .table-subhead th{display:block;padding:.7rem .9rem;background:var(--primary-blue);color:#fff;font-weight:700}
-}
 
-@media (max-width: 420px){
-  .catalog td{padding:.7rem .8rem}
-  .catalog td::before{margin-bottom:.4rem;font-size:.95rem}
-}
+  render();
+});
